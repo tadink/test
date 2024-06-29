@@ -36,10 +36,14 @@ class BladeCompilerFactory
                       continue;
                     }
                     if(\$k=='type_id'){
-                     \$vodTypes= Hyperf\DbConnection\Db::table('vod_type')->select(['id'])->where('parent_id','=',\$v)->get();
-                    \$typeIds=\$vodTypes->pluck('id')->toArray();
-                    \$query->whereIn('type_id',\$typeIds);
-                      continue;
+                        \$vodTypes= Hyperf\DbConnection\Db::table('vod_type')->select(['id'])->where('parent_id','=',\$v)->get();
+                        \$typeIds=\$vodTypes->pluck('id')->toArray();
+                        if(empty(\$typeIds)){
+                            \$query->where('type_id','=',\$v)
+                        }else{
+                            \$query->whereIn('type_id',\$typeIds);
+                        }
+                        continue;
                     }
                     if(is_array(\$v)){
                         \$query->where(\$k,\$v[0],\$v[1]);

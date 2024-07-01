@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/spf13/cobra"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -46,31 +48,31 @@ func (t *Class) TableName() string {
 }
 
 type Vod struct {
-	Id          int          `json:"vod_id" gorm:"column:id"`
-	TypeId      int          `json:"type_id" gorm:"column:type_id"`
-	Name        string       `json:"vod_name" gorm:"column:name"`
-	EnName      string       `json:"vod_en" gorm:"column:en_name"`
-	Sub         string       `json:"vod_sub" gorm:"column:sub"`
-	Status      int          `json:"vod_status" gorm:"column:status"`
-	State       string       `json:"vod_state" gorm:"column:state"`
-	Letter      string       `json:"vod_letter" gorm:"column:letter"`
-	Pic         string       `json:"vod_pic" gorm:"column:pic"`
-	Remark      string       `json:"vod_remarks" gorm:"column:remark"`
-	Score       string       `json:"vod_score" gorm:"score"`
-	VodDirector string       `json:"vod_director" gorm:"-"`
-	Directors   []*Director  `json:"directors" gorm:"many2many:director_vod;foreignKey:id;joinForeignKey:vod_id;References:id;joinReferences:director_id"`
-	VodActor    string       `json:"vod_actor" gorm:"-"`
-	Actors      []*Actor     `json:"actors" gorm:"many2many:actor_vod;foreignKey:id;joinForeignKey:vod_id;References:id;joinReferences:actor_id"`
-	VodClass    string       `json:"vod_class" gorm:"-"`
-	Classes     []*Class     `json:"classes" gorm:"many2many:class_vod;foreignKey:id;joinForeignKey:vod_id;References:id;joinReferences:class_id"`
-	Area        string       `json:"vod_area" gorm:"column:area"`
-	Language    string       `json:"vod_lang" gorm:"column:language"`
-	Year        string       `json:"vod_year" gorm:"column:year"`
-	VodTime     string       `json:"vod_time" gorm:"column:vod_time"`
-	Content     string       `json:"vod_content" gorm:"column:content"`
-	SourceName  string       `json:"source_name" gorm:"column:source_name"`
-	VodPlayUrl  string       `json:"vod_play_url" gorm:"-"`
-	VodPlayUrls []VodPlayUrl `json:"vod_play_urls" gorm:"foreignKey:vod_id"`
+	Id          int           `json:"vod_id" gorm:"column:id"`
+	TypeId      int           `json:"type_id" gorm:"column:type_id"`
+	Name        string        `json:"vod_name" gorm:"column:name"`
+	EnName      string        `json:"vod_en" gorm:"column:en_name"`
+	Sub         string        `json:"vod_sub" gorm:"column:sub"`
+	Status      int           `json:"vod_status" gorm:"column:status"`
+	State       string        `json:"vod_state" gorm:"column:state"`
+	Letter      string        `json:"vod_letter" gorm:"column:letter"`
+	Pic         string        `json:"vod_pic" gorm:"column:pic"`
+	Remark      string        `json:"vod_remarks" gorm:"column:remark"`
+	Score       string        `json:"vod_score" gorm:"score"`
+	VodDirector string        `json:"vod_director" gorm:"-"`
+	Directors   []*Director   `json:"directors" gorm:"many2many:director_vod;foreignKey:id;joinForeignKey:vod_id;References:id;joinReferences:director_id"`
+	VodActor    string        `json:"vod_actor" gorm:"-"`
+	Actors      []*Actor      `json:"actors" gorm:"many2many:actor_vod;foreignKey:id;joinForeignKey:vod_id;References:id;joinReferences:actor_id"`
+	VodClass    string        `json:"vod_class" gorm:"-"`
+	Classes     []*Class      `json:"classes" gorm:"many2many:class_vod;foreignKey:id;joinForeignKey:vod_id;References:id;joinReferences:class_id"`
+	Area        string        `json:"vod_area" gorm:"column:area"`
+	Language    string        `json:"vod_lang" gorm:"column:language"`
+	Year        string        `json:"vod_year" gorm:"column:year"`
+	VodTime     string        `json:"vod_time" gorm:"column:vod_time"`
+	Content     string        `json:"vod_content" gorm:"column:content"`
+	SourceName  string        `json:"source_name" gorm:"column:source_name"`
+	VodPlayUrl  string        `json:"vod_play_url" gorm:"-"`
+	VodPlayUrls []*VodPlayUrl `json:"vod_play_urls" gorm:"foreignKey:vod_id"`
 }
 
 func (t *Vod) TableName() string {
@@ -150,45 +152,60 @@ func init() {
 	sqlDb.SetMaxOpenConns(20)
 }
 
-func main() {
+var (
+	hour      int64
+	startPage int
+	isUpdate  bool
+)
 
+func main() {
+	rootCmd := &cobra.Command{
+		Use:   "vod",
+		Short: "全量抓取",
+		Run: func(cmd *cobra.Command, args []string) {
+			getAllVod()
+		},
+	}
+	updateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "更新数据",
+		Run: func(cmd *cobra.Command, args []string) {
+			updateVod()
+		},
+	}
+	updateCmd.Flags().Int64VarP(&hour, "hours", "s", 0, "最近多少小时的数据")
+	rootCmd.Flags().IntVarP(&startPage, "page", "p", 1, "起始页")
+	rootCmd.AddCommand(updateCmd)
+	err := rootCmd.Execute()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+}
+
+func getAllVod() {
+	run()
+}
+func updateVod() {
+	isUpdate = true
+	run()
+}
+
+func run() {
 	var pageChan = make(chan int, 5)
+	var wg = new(sync.WaitGroup)
+	var once = new(sync.Once)
 	var finishChan = make(chan struct{})
-	var wg sync.WaitGroup
-	var once sync.Once
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
-		go func() {
-			for page := range pageChan {
-				vods, err := queryPage(page)
-				if err != nil {
-					fmt.Println(err.Error())
-					once.Do(func() {
-						close(finishChan)
-					})
-				}
-				for _, vod := range vods {
-					parseVod(vod)
-					fmt.Println(vod.Id)
-					err = AddVod(vod)
-					if err != nil {
-						fmt.Println(err.Error())
-
-					}
-				}
-
-			}
-			wg.Done()
-		}()
+		go worker(pageChan, finishChan, once, wg)
 	}
 
-	page := 1
+	page := startPage
 	finish := false
 	for {
 		select {
 		case <-finishChan:
 			finish = true
-
 		case pageChan <- page:
 		}
 		if finish {
@@ -198,11 +215,43 @@ func main() {
 	}
 	close(pageChan)
 	wg.Wait()
-}
 
+}
+func worker(pageChan chan int, finishChan chan<- struct{}, once *sync.Once, wg *sync.WaitGroup) {
+	for page := range pageChan {
+		vods, err := queryPage(page)
+		if err != nil {
+			fmt.Println(err.Error())
+			once.Do(func() {
+				close(finishChan)
+			})
+		}
+		for _, vod := range vods {
+			parseVod(vod)
+			fmt.Println(vod.Id)
+			err = AddVod(vod)
+			if err != nil {
+				fmt.Println(err.Error())
+
+			}
+		}
+
+	}
+	wg.Done()
+}
 func queryPage(page int) ([]*Vod, error) {
 	requestUrl := fmt.Sprintf("https://hw8.live/api.php/provide/vod/?ac=videolist&pg=%d", page)
-	data, err := getResponseData(requestUrl)
+	u, _ := url.Parse(requestUrl)
+	if isUpdate {
+		if hour == 0 {
+			hour = queryLastTime()
+		}
+		q := u.Query()
+		q.Add("h", fmt.Sprintf("%d", hour))
+		u.RawQuery = q.Encode()
+	}
+
+	data, err := getResponseData(u.String())
 	if err != nil {
 		return nil, err
 	}
@@ -210,6 +259,9 @@ func queryPage(page int) ([]*Vod, error) {
 	err = json.Unmarshal(data, &result)
 	if err != nil {
 		return nil, err
+	}
+	if len(result.List) == 0 {
+		return nil, errors.New("last page")
 	}
 	return result.List, nil
 
@@ -244,12 +296,12 @@ func parseVod(vod *Vod) {
 		vod.Actors = append(vod.Actors, &Actor{Name: actor})
 	}
 	playUrls := strings.Split(vod.VodPlayUrl, "#")
-	for _, url := range playUrls {
-		parts := strings.Split(url, "$")
+	for _, playUrl := range playUrls {
+		parts := strings.Split(playUrl, "$")
 		if len(parts) != 2 {
 			continue
 		}
-		vod.VodPlayUrls = append(vod.VodPlayUrls, VodPlayUrl{
+		vod.VodPlayUrls = append(vod.VodPlayUrls, &VodPlayUrl{
 			Name: parts[0],
 			Url:  parts[1],
 		})
@@ -318,7 +370,7 @@ func AddVod(v *Vod) error {
 	picUrl, _ := url.Parse(v.Pic)
 
 	err := db.Model(&Vod{}).
-		Omit("Classes", "Actors", "Directors").
+		Omit("Classes", "Actors", "Directors", "VodPlayUrls").
 		Assign(&Vod{
 			Remark:   v.Remark,
 			Score:    v.Score,
@@ -332,6 +384,19 @@ func AddVod(v *Vod) error {
 		FirstOrCreate(v).Error
 	if err != nil {
 		return err
+	}
+	if len(v.VodPlayUrls) > 0 {
+		err = deletePlayUrls(v.Id)
+		if err != nil {
+			return err
+		}
+		for _, playUrl := range v.VodPlayUrls {
+			playUrl.VodId = v.Id
+		}
+		err = addPlayUrls(v.VodPlayUrls)
+		if err != nil {
+			return err
+		}
 	}
 	for _, actor := range v.Actors {
 		err := db.Model(&ActorVod{}).Where("actor_id=? and vod_id=?", actor.Id, v.Id).Create(&ActorVod{
@@ -383,7 +448,19 @@ func queryActor(name string) *Actor {
 	}
 	return result
 }
+func queryLastTime() int64 {
+	var result Vod
+	err := db.Model(&Vod{}).Select("vod_time").Limit(1).Order("vod_time desc").First(&result).Error
+	if err != nil {
+		return 0
+	}
+	t, err := time.Parse("2006-01-02 15:04:05", result.VodTime)
+	if err != nil {
+		return 0
+	}
+	return int64(math.Floor(time.Now().Sub(t).Hours() + 2))
 
+}
 func downloadPic(requestUrl string) error {
 	picUrl, err := url.Parse(requestUrl)
 	if err != nil {
@@ -428,4 +505,10 @@ func PathExists(path string) bool {
 		return false
 	}
 	return false
+}
+func deletePlayUrls(vodId int) error {
+	return db.Model(&VodPlayUrl{}).Where("vod_id=?", vodId).Delete(&VodPlayUrl{}).Error
+}
+func addPlayUrls(items []*VodPlayUrl) error {
+	return db.Model(&VodPlayUrl{}).Create(&items).Error
 }

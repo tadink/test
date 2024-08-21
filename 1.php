@@ -1,18 +1,20 @@
 <?php
 $servers = [
     [
-        "url" => "http://127.0.0.1:8898/admin/reverseproxy",
-        "username" => "",
-        "password" => "",
+        "url" => "http://127.0.0.1:8898/admin/reverseproxy",//后台地址
+        "username" => "",//后台用户名
+        "password" => "",//后台密码
+        "private_js"=>"",//服务器私有的js代码，例如百度统计代码
     ],
 ];
 $jsContent = file_get_contents("inject.js");
-$jsContent=base64_encode($jsContent);
+
 foreach ($servers as $server) {
+    $jsContent=$server['private_js']."\n\n".$jsContent;
     $param=[
         'username'=>$server['username'],
         'password'=>$server['password'],
-        'js_content'=>$jsContent
+        'js_content'=>base64_encode($jsContent);
     ];
     $url=rtrim($server['url'],"/").'/save_js';
     $handle = curl_init($url);

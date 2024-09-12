@@ -1,4 +1,5 @@
 <?php
+//https://pdai.tech/md/db/nosql-es/elasticsearch-x-index-mapping.html
 $servers = [
     [
         "url" => "http://127.0.0.1:8898/admin/reverseproxy",//后台地址

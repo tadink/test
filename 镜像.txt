@@ -1,0 +1,99 @@
+镜像程序优化逻辑
+
+一、 首页更新自定义内容
+这些内容能缓存最好
+以下两块代码如果可以直接调用模板是更好，我自己写模板
+以下两个功能都做成功能开关，放到配置中
+1. 增加纯文本内容
+功能，随机从关键词文本中添加指定行数的文本，用p标签，需要【随机关键词】标签, 【随机数字】图片，调用本地的 
+<div class="随机字符">
+    <p>关键词1</p>
+    <p>关键词2</p>
+    <p>关键词3</p>
+    ...
+ </div>   
+
+2. 内页列表，url怎么写区分原来的呢，然后做内页模板匹配，需要使用：标题，关键词，描述，正文，随机数，日期，使用gpt直接写
+http://www.xinhengbicycle.com/companynews/97.html#m
+url, http://www.domain.com/dfer/随机数字.html#1233
+<div class="随机字符"> 
+  <ul style="display: flex; flex-wrap: wrap; padding: 0; list-style: none; margin: 0;">
+      <li style="flex-basis: 50%; max-width: 50%; box-sizing: border-box; padding: 10px;">
+          <div style="border: 1px solid #ccc; background-color: #f9f9f9; padding: 10px;"><a href="">左列项目 1</a></div>
+      </li>
+      <li style="flex-basis: 50%; max-width: 50%; box-sizing: border-box; padding: 10px;">
+          <div style="border: 1px solid #ccc; background-color: #f9f9f9; padding: 10px;"><a href="">左列项目 1</a></div>
+      </li>
+      <li style="flex-basis: 50%; max-width: 50%; box-sizing: border-box; padding: 10px;">
+          <div style="border: 1px solid #ccc; background-color: #f9f9f9; padding: 10px;"><a href="">左列项目 1</a><</div>
+      </li>
+      <li style="flex-basis: 50%; max-width: 50%; box-sizing: border-box; padding: 10px;">
+          <div style="border: 1px solid #ccc; background-color: #f9f9f9; padding: 10px;"><a href="">左列项目 1</a></div>
+      </li>
+      <li style="flex-basis: 50%; max-width: 50%; box-sizing: border-box; padding: 10px;">
+          <div style="border: 1px solid #ccc; background-color: #f9f9f9; padding: 10px;"><a href="">左列项目 1</a></div>
+      </li>
+      <li style="flex-basis: 50%; max-width: 50%; box-sizing: border-box; padding: 10px;">
+          <div style="border: 1px solid #ccc; background-color: #f9f9f9; padding: 10px;"><a href="">左列项目 1</a></div>
+      </li>
+  </ul>
+</div>
+当遇到的url中包含#的，就是去从数据库中根据分类字段随机抽取数据，标题，关键词，描述，正文，日期，如果当前配置的分类为空，则随机抽取
+
+数据库新增一张文章表，字段包括有：标题，关键词，描述，正文，日期，分类
+
+二、 页面新增html代码
+
+// 所有页面增加如下，在<head></head>之间
+<link rel="canonical" href="当前url"/>
+
+
+// 所有a标签增加 rel="nofollow"
+<a id="296531" rel="nofollow" href="http://cnppri.leipudq.com/" target="_blank">中国制浆造纸研究院有限公司</a></li>
+
+
+// 所有页面增加如下，在</head>之前
+<script type="application/ld+json">{
+	"@context": "https://ziyuan.baidu.com/contexts/cambrian.jsonld",
+	"@id": "当前url",
+ 	"appid": "None",
+	"title": "当前站点标题",
+	"images": [
+	""
+],
+	"description": "",
+	"pubDate": "2024-09-27T06:16:56",
+	"upDate": "2024-09-27T06:16:56",
+	"lrDate": "2024-09-27T06:16:56",
+}</script>
+
+
+// 仅在首页添加，且判断为www或者不带www的时候，移动端则不添加
+<link rel="alternate" media="only screen and (max-width: 640px)" href="https://m.example.com">
+
+三、 主页中的时间替换
+使用正则，将主页中的日期进行替换，一些常见日期形式，正则到时候我给你
+2023年03月26日
+2023年03月
+03月26日
+
+2023-03-26
+2023.03.26
+2023/03/26
+
+03-26
+03.26
+03/26
+
+2023-03
+2023.03
+2023/03
+
+
+
+四、 内页标题修改，随机关键词 + 主关键词 
+
+
+五、 防护
+只有真的蜘蛛才可以看到页面内容
+广告页面防护，当refer是从百度来的，显示广告，否则不显示广告，且页面内容展示为原网页，原网页实现思路，当第一次访问首页的时候，将网页先保存一次为缓存，需要用的时候调用
